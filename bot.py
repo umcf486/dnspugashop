@@ -1,6 +1,5 @@
 """
-ربات فروشگاهی AyhanX-Freedom - نسخه نهایی پایتون برای Railway
-توسعه‌دهنده: تیم حرفه‌ای
+ربات فروشگاهی AyhanX-Freedom - نسخه نهایی با پشتیبانی از پایتون ۳.۱۱
 """
 
 import os
@@ -17,10 +16,10 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Mess
 
 # ==================== تنظیمات اولیه ====================
 BOT_TOKEN = '8631736538:AAFkNgUY5QM4Gr8eqQsviUk6NxkLcZvT5yc'
-ADMIN_ID = 6897603496
+ADMIN_ID = 8907076433
 SUPPORT_USERNAME = '@nspubgabot'
 CHANNEL_ID = '@dnspubga'
-SHOP_NAME = 'dnspugashop'
+SHOP_NAME = 'AyhanX-Freedom'
 
 # وضعیت‌های سفارش
 ORDER_STATUS = {
@@ -446,7 +445,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=None
             )
         elif action == 'send':
-            # ذخیره در context برای دریافت متن اکانت بعدی
             context.user_data['admin_send_order'] = order_id
             await query.edit_message_text(f"📤 لطفاً <b>متن اکانت</b> را برای سفارش <code>{order_id}</code> ارسال کنید.", parse_mode='HTML')
             await context.bot.send_message(chat_id=order['userId'], text=f"🔄 ادمین در حال ارسال اکانت برای سفارش <code>{order_id}</code> می‌باشد.", parse_mode='HTML')
@@ -572,7 +570,7 @@ async def main():
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     application.add_handler(MessageHandler(filters.PHOTO, handle_message))
     
-    # شروع Polling (حذف Webhook و استفاده از Long Polling)
+    # شروع Polling
     logging.info("🚀 ربات با روش Polling شروع به کار کرد...")
     await application.initialize()
     await application.start()

@@ -1,18 +1,28 @@
+"""
+ربات فروشگاهی AyhanX-Freedom - نسخه نهایی پایتون برای Railway
+توسعه‌دهنده: تیم حرفه‌ای
+"""
+
 import os
-import sqlite3
+import sys
 import json
 import logging
+import sqlite3
+import random
+import time
 from datetime import datetime
+from flask import Flask, request, jsonify
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 
-# -------------------- تنظیمات --------------------
+# ==================== تنظیمات اولیه ====================
 BOT_TOKEN = '8631736538:AAFkNgUY5QM4Gr8eqQsviUk6NxkLcZvT5yc'
-ADMIN_ID = 6897603496
+ADMIN_ID = 8907076433
 SUPPORT_USERNAME = '@nspubgabot'
 CHANNEL_ID = '@dnspubga'
-SHOP_NAME = 'dnspubgashop⚡'
+SHOP_NAME = 'AyhanX-Freedom'
 
+# وضعیت‌های سفارش
 ORDER_STATUS = {
     'PENDING': 'pending',
     'CONFIRMED': 'confirmed',
@@ -20,6 +30,7 @@ ORDER_STATUS = {
     'SENT': 'sent'
 }
 
+# محصولات و پلن‌ها
 PRODUCTS = {
     'wireguard_gaming': {
         'name': 'وایرگارد گیم و وب گردی',
@@ -53,7 +64,10 @@ PRODUCTS = {
 CONFIG_TYPES = ['WireGuard', 'V2Ray']
 PAYMENT_METHODS = ['کارت به کارت', 'رمز دوم (اینترنتی)', 'کیف پول (USDT)']
 
-# -------------------- دیتابیس SQLite --------------------
+# ==================== راه‌اندازی Flask ====================
+app = Flask(__name__)
+
+# ==================== دیتابیس SQLite ====================
 DB_PATH = '/data/data.db' if os.path.exists('/data') else 'data.db'
 
 def get_db():
@@ -88,9 +102,8 @@ def init_db():
         conn.commit()
     logging.info('✅ دیتابیس آماده شد')
 
-# -------------------- توابع کمکی --------------------
+# ==================== توابع کمکی ====================
 def generate_order_id():
-    import time, random
     return hex(int(time.time() * 1000))[2:] + hex(random.randint(0, 0xFFFF))[2:]
 
 def save_order(order):
@@ -152,7 +165,7 @@ def clear_user_state(chat_id):
         conn.execute('DELETE FROM user_states WHERE chatId = ?', (chat_id,))
         conn.commit()
 
-# -------------------- کیبوردها (InlineKeyboard) --------------------
+# ==================== کیبوردها ====================
 def main_menu():
     keyboard = [
         [InlineKeyboardButton('🛒 فروشگاه', callback_data='menu|shop'),
@@ -209,7 +222,7 @@ def admin_order_keyboard(order_id):
     ]
     return InlineKeyboardMarkup(keyboard)
 
-# -------------------- توابع فرمت پیام --------------------
+# ==================== توابع فرمت پیام ====================
 def format_order_summary(order):
     product = PRODUCTS.get(order['productId'], {})
     plan = product.get('plans', {}).get(order['planId'], {})
@@ -263,7 +276,7 @@ def format_order_status(order):
         'sent': '📤 ارسال شده'
     }.get(order['status'], order['status'])
 
-# -------------------- هندلرهای اصلی --------------------
+# ==================== هندلرهای ربات ====================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     await clear_user_state(chat_id)
@@ -442,7 +455,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await context.bot.send_message(chat_id=order['userId'], text=f"🔄 ادمین در حال ارسال اکانت برای سفارش <code>{order_id}</code> می‌باشد.", parse_mode='HTML')
         return
 
-    # دستور ناشناخته
     await query.edit_message_text('دستور نامعتبر.')
 
 async def show_user_orders(chat_id, query=None):
@@ -460,7 +472,6 @@ async def show_user_orders(chat_id, query=None):
     else:
         await context.bot.send_message(chat_id=chat_id, text=msg, reply_markup=main_menu(), parse_mode='HTML')
 
-# -------------------- هندلر پیام‌های متنی و عکس --------------------
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     text = update.message.text
@@ -550,28 +561,95 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=main_menu()
     )
 
-# -------------------- راه‌اندازی ربات --------------------
-def main():
-    # راه‌اندازی دیتابیس
-    init_db()
-    # ایجاد اپلیکیشن
-    application = Application.builder().token(BOT_TOKEN).build()
+# ==================== تنظیم Webhook و Flask ====================
+@app.route('/')
+def index():
+    orders_count = len(get_all_orders())
+    return f"""
+    <html dir="rtl">
+    <head><title>{SHOP_NAME}</title></head>
+    <body style="background: #0a0a1a; color: #fff; font-family: 'Segoe UI', Tahoma, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0;">
+        <div style="background: rgba(255,255,255,0.05); backdrop-filter: blur(12px); border-radius: 28px; padding: 40px; max-width: 500px; text-align: center; border: 1px solid rgba(255,255,255,0.1);">
+            <h1 style="font-size: 2.5rem; background: linear-gradient(to left, #f7971e, #ffd200); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">🛒 {SHOP_NAME}</h1>
+            <p style="color: #aaa; margin: 20px 0;">ربات فروشگاهی کانفیگ</p>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin: 25px 0;">
+                <div style="background: rgba(255,255,255,0.06); border-radius: 16px; padding: 15px;">
+                    <div style="color: #aaa; font-size: 0.8rem;">تعداد محصولات</div>
+                    <div style="font-size: 1.5rem; font-weight: 600; color: #60a5fa;">{len(PRODUCTS)}</div>
+                </div>
+                <div style="background: rgba(255,255,255,0.06); border-radius: 16px; padding: 15px;">
+                    <div style="color: #aaa; font-size: 0.8rem;">تعداد سفارش‌ها</div>
+                    <div style="font-size: 1.5rem; font-weight: 600; color: #4ade80;">{orders_count}</div>
+                </div>
+            </div>
+            <div style="color: #666; font-size: 0.8rem; margin-top: 20px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 20px;">
+                <span style="color: #4ade80;">● ربات فعال است</span>
+                <br><br>
+                <span style="color: #555;">نسخه ۱.۰ | AyhanX-Freedom</span>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
 
-    # ثبت هندلرها
+@app.route(f'/{BOT_TOKEN}', methods=['POST'])
+async def webhook():
+    try:
+        update = Update.de_json(request.get_json(force=True), application.bot)
+        await application.process_update(update)
+        return jsonify({'status': 'ok'})
+    except Exception as e:
+        logging.error(f'Webhook error: {e}')
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/set-webhook')
+def set_webhook():
+    try:
+        base_url = request.host_url.rstrip('/')
+        webhook_url = f"{base_url}/{BOT_TOKEN}"
+        import requests
+        response = requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/setWebhook?url={webhook_url}")
+        return f"""
+        <html dir="rtl">
+        <body style="background: #0a0a1a; color: #fff; font-family: 'Segoe UI', Tahoma, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0;">
+            <div style="background: rgba(255,255,255,0.05); border-radius: 20px; padding: 30px; max-width: 500px; text-align: center;">
+                <h1 style="color: #4ade80;">✅ Webhook تنظیم شد</h1>
+                <p style="color: #aaa;">آدرس Webhook: <code style="background: #1a1a2e; padding: 5px 10px; border-radius: 5px; color: #60a5fa;">{webhook_url}</code></p>
+                <p style="color: #aaa;">پاسخ: <code style="background: #1a1a2e; padding: 5px 10px; border-radius: 5px; color: #ffd200;">{response.json()}</code></p>
+                <a href="/" style="color: #6C63FF; text-decoration: none;">بازگشت به صفحه اصلی</a>
+            </div>
+        </body>
+        </html>
+        """
+    except Exception as e:
+        return f"<h1>❌ خطا: {e}</h1>"
+
+# ==================== راه‌اندازی ====================
+def setup_application():
+    global application
+    application = Application.builder().token(BOT_TOKEN).build()
     application.add_handler(CommandHandler('start', start))
     application.add_handler(CallbackQueryHandler(handle_callback))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     application.add_handler(MessageHandler(filters.PHOTO, handle_message))
-
-    # اجرا
-    port = int(os.environ.get('PORT', 8080))
-    application.run_webhook(
-        listen='0.0.0.0',
-        port=port,
-        url_path=BOT_TOKEN,
-        webhook_url=f"https://{os.environ.get('RAILWAY_PUBLIC_DOMAIN', 'localhost')}/{BOT_TOKEN}"
-    )
+    return application
 
 if __name__ == '__main__':
-    logging.basicConfig(level=logging.INFO)
-    main()
+    # تنظیم لاگ
+    logging.basicConfig(
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        level=logging.INFO
+    )
+    # مقداردهی اولیه
+    init_db()
+    application = setup_application()
+    
+    # دریافت پورت از Railway
+    port = int(os.environ.get('PORT', 8080))
+    
+    # راه‌اندازی Flask
+    app.run(host='0.0.0.0', port=port)
+else:
+    # برای Railway که از Gunicorn استفاده می‌کند
+    init_db()
+    application = setup_application()

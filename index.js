@@ -4,10 +4,10 @@
 
 // -------------------- تنظیمات ثابت --------------------
 const BOT_TOKEN = '8631736538:AAFkNgUY5QM4Gr8eqQsviUk6NxkLcZvT5yc';
-const ADMIN_ID = 8907076433;
+const ADMIN_ID = 6897603496;
 const SUPPORT_USERNAME = '@nspubgabot';
 const CHANNEL_ID = '@dnspubga';
-const SHOP_NAME = 'AyhanX-Freedom';
+const SHOP_NAME = 'dnspugashop';
 
 const ORDER_STATUS = {
   PENDING: 'pending',

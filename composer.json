@@ -1,8 +1,0 @@
-{
-    "name": "ayhanx-freedom-bot",
-    "description": "ربات فروشگاهی کانفیگ با PHP",
-    "type": "project",
-    "require": {
-        "php": ">=8.0"
-    }
-}

@@ -3,13 +3,11 @@
 """
 
 import os
-import sys
 import json
 import logging
 import sqlite3
 import random
 import time
-import asyncio
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
@@ -21,7 +19,6 @@ SUPPORT_USERNAME = '@nspubgabot'
 CHANNEL_ID = '@dnspubga'
 SHOP_NAME = 'AyhanX-Freedom'
 
-# وضعیت‌های سفارش
 ORDER_STATUS = {
     'PENDING': 'pending',
     'CONFIRMED': 'confirmed',
@@ -29,7 +26,6 @@ ORDER_STATUS = {
     'SENT': 'sent'
 }
 
-# محصولات و پلن‌ها
 PRODUCTS = {
     'wireguard_gaming': {
         'name': 'وایرگارد گیم و وب گردی',
@@ -134,11 +130,6 @@ def update_order_status(order_id, status, extra=None):
 def get_user_orders(user_id):
     with get_db() as conn:
         rows = conn.execute('SELECT * FROM orders WHERE userId = ? ORDER BY createdAt DESC', (user_id,)).fetchall()
-        return [dict(row) for row in rows]
-
-def get_all_orders():
-    with get_db() as conn:
-        rows = conn.execute('SELECT * FROM orders ORDER BY createdAt DESC').fetchall()
         return [dict(row) for row in rows]
 
 def get_user_state(chat_id):
@@ -288,7 +279,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = query.from_user.id
     data = query.data
 
-    # منو
     if data.startswith('menu|'):
         parts = data.split('|')
         action = parts[1]
@@ -305,7 +295,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text('🏠 منوی اصلی:', reply_markup=main_menu())
         return
 
-    # انتخاب محصول
     if data.startswith('product|'):
         parts = data.split('|')
         product_id = parts[1]
@@ -323,7 +312,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # انتخاب پلن
     if data.startswith('plan|'):
         parts = data.split('|')
         if len(parts) != 3:
@@ -348,7 +336,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # انتخاب نوع کانفیگ
     if data.startswith('config|'):
         parts = data.split('|')
         config_type = parts[1]
@@ -365,7 +352,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # انتخاب روش پرداخت
     if data.startswith('pay|'):
         parts = data.split('|')
         method = parts[1]
@@ -382,7 +368,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # تایید یا لغو سفارش
     if data.startswith('confirm|') or data.startswith('cancel|'):
         parts = data.split('|')
         action = parts[0]
@@ -401,7 +386,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             order['status'] = ORDER_STATUS['PENDING']
             await save_order(order)
             await clear_user_state(chat_id)
-            # ارسال به ادمین
             admin_msg = format_admin_order_message(order)
             await context.bot.send_message(
                 chat_id=ADMIN_ID,
@@ -416,7 +400,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         return
 
-    # اقدامات ادمین
     if data.startswith('admin|'):
         parts = data.split('|')
         if len(parts) < 3:
@@ -464,15 +447,12 @@ async def show_user_orders(chat_id, query=None):
         msg += f"🆔 <code>{o['id']}</code> - {format_order_status(o)}\n"
     if query:
         await query.edit_message_text(msg, reply_markup=main_menu(), parse_mode='HTML')
-    else:
-        await context.bot.send_message(chat_id=chat_id, text=msg, reply_markup=main_menu(), parse_mode='HTML')
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     text = update.message.text
     photo = update.message.photo
 
-    # اگر ادمین در حال ارسال اکانت است
     if context.user_data.get('admin_send_order') and text:
         order_id = context.user_data.pop('admin_send_order')
         order = await get_order(order_id)
@@ -489,7 +469,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"✅ اکانت سفارش <code>{order_id}</code> با موفقیت ارسال شد.", parse_mode='HTML')
         return
 
-    # بررسی مرحله فعلی کاربر
     state = await get_user_state(chat_id)
     step = state.get('step')
 
@@ -497,7 +476,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         photo_id = photo[-1].file_id
         state['tempData']['receiptPhotoId'] = photo_id
         state['step'] = 'confirming_order'
-        # تولید سفارش موقت
         order_id = generate_order_id()
         temp = state['tempData']
         order = {
@@ -523,7 +501,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # پردازش ورودی نام یا کد پیگیری
     if text:
         if step == 'entering_name':
             if len(text.strip()) < 2:
@@ -550,45 +527,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
-    # اگر هیچکدام نبود
     await update.message.reply_text(
         'لطفاً از منوی اصلی استفاده کنید:',
         reply_markup=main_menu()
     )
 
-# ==================== اجرا با Polling (ساده‌تر و بدون نیاز به Webhook) ====================
-async def main():
-    # مقداردهی اولیه دیتابیس
-    init_db()
-    
-    # ساخت اپلیکیشن
-    application = Application.builder().token(BOT_TOKEN).build()
-    
-    # ثبت هندلرها
-    application.add_handler(CommandHandler('start', start))
-    application.add_handler(CallbackQueryHandler(handle_callback))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    application.add_handler(MessageHandler(filters.PHOTO, handle_message))
-    
-    # شروع Polling
-    logging.info("🚀 ربات با روش Polling شروع به کار کرد...")
-    await application.initialize()
-    await application.start()
-    await application.updater.start_polling()
-    
-    # نگه داشتن برنامه
-    try:
-        while True:
-            await asyncio.sleep(3600)
-    except (KeyboardInterrupt, SystemExit):
-        logging.info("⏹️ توقف ربات...")
-        await application.updater.stop()
-        await application.stop()
-        await application.shutdown()
-
+# ==================== اجرا ====================
 if __name__ == '__main__':
     logging.basicConfig(
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         level=logging.INFO
     )
-    asyncio.run(main())
+    init_db()
+    application = Application.builder().token(BOT_TOKEN).build()
+    application.add_handler(CommandHandler('start', start))
+    application.add_handler(CallbackQueryHandler(handle_callback))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    application.add_handler(MessageHandler(filters.PHOTO, handle_message))
+    logging.info("🚀 ربات با روش Polling شروع به کار کرد...")
+    application.run_polling()
